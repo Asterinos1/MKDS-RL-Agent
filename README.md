@@ -1,1 +1,3 @@
-# RL-MKDS-Agent
+# Mario Kart DS - RL Agent
+
+WIP
