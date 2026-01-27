@@ -1,0 +1,24 @@
+# --- ROM & SAVE STATE PATH ---
+ROM_PATH = 'C:/Users/PC/Desktop/DS-DSi/Libray/mkds_usa.nds'
+SAVE_FILE_NAME = 'C:/Users/PC/Documents/GitHub/MKDS-RL-Agent/mkds_boot.dst'
+
+# --- RL Hyperparameters ---
+STATE_W, STATE_H = 84, 84
+STACK_SIZE = 4
+ACTION_SPACE = 6  # 0:Straight, 1:Left, 2:Right, 3:Drift+Straight, 4:Drift+Left, 5:Drift+Right
+GAMMA = 0.99
+LEARNING_RATE = 0.00025
+MEMORY_SIZE = 50000
+BATCH_SIZE = 32
+EPSILON_START = 1.0
+EPSILON_END = 0.1
+EPSILON_DECAY = 100000  # Frames to reach EPSILON_END
+
+# --- Pointers (US Version) ---
+ADDR_BASE_POINTER = 0x0217ACF8
+ADDR_RACE_INFO_POINTER = 0x021755FC
+OFFSET_SPEED = 0x2A8
+OFFSET_ANGLE = 0x236
+OFFSET_CHECKPOINT = 0x46
+OFFSET_LAP = 0x38        
+OFFSET_OFFROAD = 0xDC   

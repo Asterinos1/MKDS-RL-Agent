@@ -1,0 +1,15 @@
+# --- Environments ---
+mkds_venv/
+.venv/
+envs/
+# --- Python Junk ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+# --- IDEs ---
+.vscode/
+# --- RL Outputs ---
+outputs/*.h5
+outputs/*.png
+outputs/*.json
