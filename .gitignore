@@ -2,6 +2,8 @@
 mkds_venv/
 .venv/
 envs/
+/logs/
+logs/
 # --- Python Junk ---
 __pycache__/
 *.py[cod]

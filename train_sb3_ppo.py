@@ -2,7 +2,7 @@ import torch
 from stable_baselines3 import DQN
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecFrameStack
 from stable_baselines3.common.callbacks import CheckpointCallback
-from env.mkds_env import MKDSEnv
+from env.mkds_gym_env import MKDSEnv
 
 def make_env():
     return MKDSEnv()
