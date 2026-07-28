@@ -15,8 +15,32 @@ import numpy as np
 import cv2
 import os
 import math
+from contextlib import contextmanager
 from desmume.emulator import DeSmuME, SCREEN_WIDTH, SCREEN_HEIGHT_BOTH
 from src.utils import config
+
+@contextmanager
+def suppress_stdout_stderr():
+    """Redirects stdout and stderr to devnull at the OS level to suppress external C/C++ library logging."""
+    try:
+        null_fd = os.open(os.devnull, os.O_RDWR)
+        saved_stdout_fd = os.dup(1)
+        saved_stderr_fd = os.dup(2)
+        os.dup2(null_fd, 1)
+        os.dup2(null_fd, 2)
+        yield
+    except Exception:
+        yield
+    finally:
+        try:
+            os.dup2(saved_stdout_fd, 1)
+            os.dup2(saved_stderr_fd, 2)
+            os.close(saved_stdout_fd)
+            os.close(saved_stderr_fd)
+            os.close(null_fd)
+        except Exception:
+            pass
+
 
 class MKDSEnv(gym.Env):
     """Gymnasium environment for Mario Kart DS.
@@ -48,17 +72,36 @@ class MKDSEnv(gym.Env):
             the last checkpoint advance; used for the timeout watchdog.
     """
 
-    def __init__(self, visualize=False):
+    def __init__(self, visualize=False, render_mode=None, mute_audio=True, suppress_output=True):
         """Initialises the emulator, spaces, and internal tracking state.
 
         Args:
             visualize (bool): When ``True``, creates an SDL window so the
                 emulator renders frames in real time.  Defaults to ``False``
                 for headless training.
+            render_mode (str | None): Gymnasium render mode. Supports 'rgb_array'.
+            mute_audio (bool): When ``True``, mutes the emulator audio volume.
+                Defaults to ``True``.
+            suppress_output (bool): When ``True``, suppresses raw DeSmuME C
+                library prints to stdout/stderr. Defaults to ``True``.
         """
         super(MKDSEnv, self).__init__()
-        self.emu = DeSmuME()
-        self.emu.open(config.ROM_PATH)
+        self.render_mode = render_mode
+        self.metadata = {"render_modes": ["rgb_array"], "render_fps": 15}
+        self.mute_audio = mute_audio
+        self.suppress_output = suppress_output
+        
+        if self.suppress_output:
+            with suppress_stdout_stderr():
+                self.emu = DeSmuME()
+                self.emu.open(config.ROM_PATH)
+        else:
+            self.emu = DeSmuME()
+            self.emu.open(config.ROM_PATH)
+
+        if self.mute_audio:
+            self.emu.volume_set(0)
+
         self.window = None
         if visualize:
             self.window = self.emu.create_sdl_window()
@@ -81,6 +124,8 @@ class MKDSEnv(gym.Env):
         self.stuck_counter = 0         # Consecutive low-movement steps
         self.last_pos = (0, 0, 0)      # Last known world-space position
         self.last_cp_time_stamp = 0    # Track internal time of last CP change
+        self.prev_action = 0           # Action taken in the previous step
+        self.lap_start_time = 0        # Race timer value at the start of current lap
 
     def _setup_actions(self):
         """Maps discrete actions to DeSmuME keymasks.
@@ -142,6 +187,19 @@ class MKDSEnv(gym.Env):
         resized = cv2.resize(gray, (config.STATE_W, config.STATE_H), interpolation=cv2.INTER_AREA)
         # Add channel dimension so shape is (H, W, 1) to match observation_space
         return np.expand_dims(resized, axis=-1)
+
+    def render(self):
+        """Renders the environment.
+        
+        Returns:
+            np.ndarray | None: RGB array of the top screen when render_mode is 'rgb_array'.
+        """
+        if self.render_mode == "rgb_array":
+            raw_mv = self.emu.display_buffer_as_rgbx()
+            img = np.frombuffer(raw_mv, dtype=np.uint8).reshape(SCREEN_HEIGHT_BOTH, SCREEN_WIDTH, 4)
+            # Crop Top Screen (first 192 rows) and return RGB (first 3 channels)
+            return img[:192, :, :3]
+        return None
 
     def _read_race_time(self):
         """Reads the internal 32-bit race timer (60 ticks per second).
@@ -337,6 +395,21 @@ class MKDSEnv(gym.Env):
             if offroad < 0.9:  # Penalize grass - halve the reward when off-track
                 reward *= 0.5
             
+            # Lap Completion Time Bonus
+            if lap > self.prev_lap:
+                if self.prev_lap > 0:
+                    lap_time_ticks = current_time - self.lap_start_time
+                    if lap_time_ticks < config.LAP_TIME_THRESHOLD_TICKS:
+                        reward += config.LAP_TIME_BONUS
+                self.lap_start_time = current_time
+
+            # Anti-Oscillation Penalty for rapid left-right switching on straightaways
+            left_actions = {1, 4}
+            right_actions = {2, 5}
+            if ((action in left_actions and self.prev_action in right_actions) or
+                (action in right_actions and self.prev_action in left_actions)):
+                reward -= 0.5
+            
             # Lap 4 is the finish condition (laps are 1-indexed internally)
             if lap > 3: 
                 terminated = True
@@ -347,6 +420,7 @@ class MKDSEnv(gym.Env):
         # Update historical trackers for use in the next step's watchdog checks
         self.prev_checkpoint, self.prev_lap = cp, lap
         self.last_pos, self.prev_speed = pos, speed
+        self.prev_action = action
         
         info = {
             "telemetry": {
@@ -391,7 +465,11 @@ class MKDSEnv(gym.Env):
         # This is much faster than a full emulator restart and avoids the
         # race-select menus that would otherwise need to be navigated.
         if os.path.exists(config.SAVE_FILE_NAME):
-            self.emu.savestate.load_file(config.SAVE_FILE_NAME) 
+            if self.suppress_output:
+                with suppress_stdout_stderr():
+                    self.emu.savestate.load_file(config.SAVE_FILE_NAME)
+            else:
+                self.emu.savestate.load_file(config.SAVE_FILE_NAME) 
         
         # Reset counters and timers
         self.stuck_counter = 0
@@ -401,6 +479,8 @@ class MKDSEnv(gym.Env):
         # Initialise the CP timestamp to the current race time so the timeout
         # watchdog does not fire immediately on the first step.
         self.last_cp_time_stamp = self._read_race_time()
+        self.prev_action = 0
+        self.lap_start_time = self._read_race_time()
         
         return self._get_obs(), {}
 

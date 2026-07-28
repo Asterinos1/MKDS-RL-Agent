@@ -18,14 +18,90 @@ import glob
 import argparse
 import logging
 from datetime import datetime
+import types
+import pickle
+import tqdm
 from stable_baselines3 import DQN
 from stable_baselines3.common.vec_env import SubprocVecEnv, VecFrameStack
 from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
 from env.mkds_gym_env import MKDSEnv
 from src.utils.callbacks import MKDSMetricsCallback
-from src.utils import config, setup_logging
+from src.utils import config, setup_logging, redirect_stdout_to_logger
 
 logger = logging.getLogger(__name__)
+
+
+class TqdmFileWrapper:
+    """Wrapper to report progress during file read/write operations (e.g. pickling)."""
+    def __init__(self, file_obj, pbar):
+        self.file_obj = file_obj
+        self.pbar = pbar
+
+    def write(self, b):
+        self.file_obj.write(b)
+        self.pbar.update(len(b))
+
+    def read(self, n=-1):
+        chunk = self.file_obj.read(n)
+        self.pbar.update(len(chunk))
+        return chunk
+
+    def readline(self, limit=-1):
+        line = self.file_obj.readline(limit)
+        self.pbar.update(len(line))
+        return line
+
+    def __getattr__(self, attr):
+        return getattr(self.file_obj, attr)
+
+
+def custom_save_replay_buffer(self, path):
+    """Custom save_replay_buffer implementation showing a progress bar via tqdm."""
+    rb = self.replay_buffer
+    total_bytes = 0
+    for attr in ["observations", "next_observations", "actions", "rewards", "dones", "timeouts"]:
+        if hasattr(rb, attr):
+            arr = getattr(rb, attr)
+            if hasattr(arr, "nbytes"):
+                total_bytes += arr.nbytes
+
+    if hasattr(rb, "observations") and isinstance(rb.observations, dict):
+        total_bytes = 0
+        for k, v in rb.observations.items():
+            if hasattr(v, "nbytes"):
+                total_bytes += v.nbytes
+        for k, v in rb.next_observations.items():
+            if hasattr(v, "nbytes"):
+                total_bytes += v.nbytes
+        for attr in ["actions", "rewards", "dones", "timeouts"]:
+            if hasattr(rb, attr):
+                arr = getattr(rb, attr)
+                if hasattr(arr, "nbytes"):
+                    total_bytes += arr.nbytes
+
+    if total_bytes == 0:
+        total_bytes = None
+
+    with open(path, "wb") as f:
+        with tqdm.tqdm(total=total_bytes, unit='B', unit_scale=True, desc="Saving Replay Buffer") as pbar:
+            wrapper = TqdmFileWrapper(f, pbar)
+            pickle.dump(rb, wrapper, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def custom_load_replay_buffer(self, path):
+    """Custom load_replay_buffer implementation showing a progress bar via tqdm."""
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"No replay buffer found at {path}")
+    file_size = os.path.getsize(path)
+    with open(path, "rb") as f:
+        with tqdm.tqdm(total=file_size, unit='B', unit_scale=True, desc="Loading Replay Buffer") as pbar:
+            wrapper = TqdmFileWrapper(f, pbar)
+            self.replay_buffer = pickle.load(wrapper)
+
+
+# Monkey-patch Stable-Baselines3 DQN class to use custom tqdm methods
+DQN.save_replay_buffer = custom_save_replay_buffer
+DQN.load_replay_buffer = custom_load_replay_buffer
 
 
 
@@ -102,6 +178,18 @@ def parse_args():
         choices=[3, 6],
         help=f"Number of discrete actions: 3 (basic) or 6 (with drift) (default: {config.ACTION_SPACE})",
     )
+    parser.add_argument(
+        "--learning-starts",
+        type=int,
+        default=config.LEARNING_STARTS,
+        help=f"Number of steps before learning begins (default: {config.LEARNING_STARTS})",
+    )
+    parser.add_argument(
+        "--target-update-interval",
+        type=int,
+        default=config.TARGET_UPDATE_INTERVAL,
+        help=f"Step interval between target network updates (default: {config.TARGET_UPDATE_INTERVAL})",
+    )
     
     # Directories / Logging
     parser.add_argument(
@@ -115,6 +203,11 @@ def parse_args():
         type=int,
         default=10000,
         help="Checkpoint saving frequency in environment steps (default: 10000)",
+    )
+    parser.add_argument(
+        "--skip-buffer-save",
+        action="store_true",
+        help="Skip saving and loading of the replay buffer (saves space and prevents saving delays).",
     )
 
     return parser.parse_args()
@@ -254,6 +347,8 @@ def train(args=None):
     config.GAMMA = args.gamma
     config.LEARNING_RATE = args.learning_rate
     config.ACTION_SPACE = args.action_space
+    config.LEARNING_STARTS = args.learning_starts
+    config.TARGET_UPDATE_INTERVAL = args.target_update_interval
 
     if args.resume:
         try:
@@ -265,6 +360,9 @@ def train(args=None):
         run_id, model_path = None, None
     else:
         run_id, model_path = select_resume_option()
+
+    # Redirect stdout to logging and capture warnings
+    redirect_stdout_to_logger()
 
     # TensorBoard logs are written to a single shared directory so that
     # multiple runs can be compared side-by-side in one TB session.
@@ -293,6 +391,8 @@ def train(args=None):
             "gamma": config.GAMMA,
             "batch_size": config.BATCH_SIZE,
             "buffer_size": config.MEMORY_SIZE,
+            "learning_starts": config.LEARNING_STARTS,
+            "target_update_interval": config.TARGET_UPDATE_INTERVAL,
         }
 
         # Reload weights and hyper-parameters; bind the resumed model to the
@@ -303,7 +403,7 @@ def train(args=None):
         # file.  Loading it lets DQN continue off-policy learning immediately
         # without refilling the buffer from scratch (warm resumption).
         buffer_path = model_path.replace(".zip", "_replay_buffer.pkl")
-        if os.path.exists(buffer_path):
+        if not args.skip_buffer_save and os.path.exists(buffer_path):
             model.load_replay_buffer(buffer_path)
     else:
         # --- Fresh run ---
@@ -320,6 +420,8 @@ def train(args=None):
             batch_size=config.BATCH_SIZE,     # Minibatch size for each gradient update.
             learning_rate=config.LEARNING_RATE, # Adam learning rate.
             gamma=config.GAMMA,               # Discount factor.
+            learning_starts=config.LEARNING_STARTS, # Steps before learning begins.
+            target_update_interval=config.TARGET_UPDATE_INTERVAL, # Interval to update target network.
             tensorboard_log=tb_log_path,
         )
 
@@ -330,6 +432,14 @@ def train(args=None):
 
     # Configure logging to write to file as well
     setup_logging(log_file=f"{base_path}/logs/train.log")
+
+    from stable_baselines3.common.logger import configure
+    from src.utils.logging_setup import LoggerOutputFormat
+    # Configure SB3 logger to write tensorboard and csv to logs folder, excluding default stdout format
+    sb3_logger = configure(f"logs/{run_id}", ["csv", "tensorboard"])
+    # Append custom stdout logger output format
+    sb3_logger.output_formats.append(LoggerOutputFormat())
+    model.set_logger(sb3_logger)
 
     # --- Callbacks ---
     # CallbackList executes both callbacks at every step simultaneously.
@@ -342,7 +452,7 @@ def train(args=None):
         # resuming training restarts with an empty buffer, causing a cold-start
         # quality drop that can last tens of thousands of steps.
         CheckpointCallback(save_freq=args.save_freq, save_path=f"{base_path}/models/",
-                           name_prefix="mkds_ckpt", save_replay_buffer=True)
+                           name_prefix="mkds_ckpt", save_replay_buffer=not args.skip_buffer_save)
     ])
 
     try:
@@ -364,7 +474,10 @@ def train(args=None):
         # so no training progress is lost regardless of when Ctrl+C was pressed.
         final_save = f"{base_path}/models/interrupted_exit"
         model.save(final_save)
-        model.save_replay_buffer(f"{final_save}_replay_buffer")
+        if not args.skip_buffer_save:
+            model.save_replay_buffer(f"{final_save}_replay_buffer")
+        else:
+            logger.info("Skipping replay buffer save (flag set).")
         logger.info(f"Safety Save Complete: {final_save}")
         try:
             logger.info("Closing environments...")

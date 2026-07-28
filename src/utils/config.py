@@ -113,14 +113,29 @@ GAMMA = 0.99
 # Adam learning rate from the original Nature DQN paper (Mnih et al., 2015).
 LEARNING_RATE = 0.00025
 
-# Replay buffer capacity in transitions.  50 000 keeps memory footprint low
-# while still providing sufficient diversity for stable Q-learning updates.
-MEMORY_SIZE = 50000
+# Replay buffer capacity in transitions. 200 000 helps significantly with
+# coverage of diverse states for a visual stacked environment.
+MEMORY_SIZE = 200000
 
 # Mini-batch size for each gradient update.
 # 128 > original 32 to better utilise modern GPU throughput.
 # BATCH_SIZE = 32
 BATCH_SIZE = 128
+
+# Number of steps before learning begins. Lowered from SB3's default 50k
+# to start training sooner and avoid wasting early collection steps.
+LEARNING_STARTS = 10000
+
+# Step interval between target network updates. Lowered from SB3's default 10k
+# to stabilize target Q-value estimation in fast-changing environments.
+TARGET_UPDATE_INTERVAL = 5000
+
+# Lap completion time threshold (in ticks, 60 ticks = 1 second).
+# 2100 ticks = 35 seconds.
+LAP_TIME_THRESHOLD_TICKS = 2100
+
+# Reward bonus awarded for completing a lap under the threshold.
+LAP_TIME_BONUS = 50.0
 
 # ε-greedy exploration schedule (kept for reference / future annealing).
 # EPSILON_START = 1.0

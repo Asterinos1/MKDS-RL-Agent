@@ -68,6 +68,17 @@ def parse_args():
         action="store_true",
         help="Run the environment headless (without the SDL visual window).",
     )
+    parser.add_argument(
+        "--record-video",
+        action="store_true",
+        help="Record a video of the demo run (saved to outputs/<run_id>/videos/)."
+    )
+    parser.add_argument(
+        "--video-length",
+        type=int,
+        default=2000,
+        help="Max number of steps to record in the video (default: 2000)."
+    )
     return parser.parse_args()
 
 
@@ -195,7 +206,7 @@ def run_demo(args=None):
 
     # Instantiate the base environment. We support toggling visualization.
     visualize = not args.no_visualize
-    base_env = MKDSEnv(visualize=visualize)
+    base_env = MKDSEnv(visualize=visualize, render_mode="rgb_array" if args.record_video else None)
 
     # DummyVecEnv wraps a single environment in the VecEnv interface without
     # creating a subprocess -- ideal for demo/inference where parallelism is
@@ -204,6 +215,20 @@ def run_demo(args=None):
 
     # Stack frames to match the observation shape the model was trained on.
     env = VecFrameStack(env, n_stack=config.STACK_SIZE, channels_order='last')
+
+    if args.record_video:
+        from stable_baselines3.common.vec_env import VecVideoRecorder
+        run_dir = os.path.dirname(os.path.dirname(model_path))
+        video_dir = os.path.join(run_dir, "videos")
+        os.makedirs(video_dir, exist_ok=True)
+        env = VecVideoRecorder(
+            env,
+            video_dir,
+            record_video_trigger=lambda step: step == 0,
+            video_length=args.video_length,
+            name_prefix=f"demo_{os.path.basename(model_path)}"
+        )
+        logger.info(f"Video recording enabled. Output will be saved to: {video_dir}")
 
     try:
         model = DQN.load(model_path, env=env, device="auto")
@@ -244,9 +269,9 @@ def run_demo(args=None):
     except KeyboardInterrupt:
         logger.info("Demonstration stopped by user.")
     finally:
-        # Always destroy the emulator to release the SDL window and any
-        # underlying DeSmuME resources, even if an exception occurred.
-        base_env.emu.destroy()
+        # Always close environments to save any recorded video and release resources
+        logger.info("Closing environment...")
+        env.close()
         logger.info("Emulator closed.")
 
 

@@ -82,3 +82,17 @@ graphify-out/
 
 # Caveman plugin artifacts
 *.caveman
+
+# ============================================================
+# LaTeX / Documentation
+# ============================================================
+docs/**/*.aux
+docs/**/*.log
+docs/**/*.out
+docs/**/*.toc
+docs/**/*.synctex.gz
+docs/**/*.pdf
+
+# Ignore py-desmume documentation
+docs/reference/py-desmume/
+docs/reference/py-desmume_api.md

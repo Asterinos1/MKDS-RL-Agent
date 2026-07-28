@@ -3,7 +3,7 @@
 # Mario Kart DS RL Agent
 **Autonomous racing with Deep Q-Networks and real-time emulator telemetry.**
 
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/downloads/) [![PyTorch](https://img.shields.io/badge/PyTorch-2.9-EE4C2C?logo=pytorch)](https://pytorch.org/) [![Stable Baselines3](https://img.shields.io/badge/SB3-DQN-8A2BE2)](https://stable-baselines3.readthedocs.io/) [![Gymnasium](https://img.shields.io/badge/Gymnasium-1.2-009688)](https://gymnasium.farama.org/) [![DeSmuME](https://img.shields.io/badge/DeSmuME-py--desmume-orange)](https://pypi.org/project/py-desmume/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/downloads/) [![PyTorch](https://img.shields.io/badge/PyTorch-2.9-EE4C2C?logo=pytorch)](https://pytorch.org/) [![Stable Baselines3](https://img.shields.io/badge/SB3-2.7.1-8A2BE2)](https://stable-baselines3.readthedocs.io/) [![Gymnasium](https://img.shields.io/badge/Gymnasium-1.2-009688)](https://gymnasium.farama.org/) [![DeSmuME](https://img.shields.io/badge/DeSmuME-py--desmume--0.0.9-orange)](https://pypi.org/project/py-desmume/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Reinforcement Learning agent for **Mario Kart DS** developed as part of the course INF412 Autonomous Agents (2025–2026), at Technical University of Crete.
 
@@ -188,6 +188,18 @@ Select a single run for individual plots, or select **0** to overlay all runs on
 
 ---
 
+## Changelog
+
+Major updates since tag0.0.1:
+
+- **DQN Training Stability**: Expanded replay buffer size to 200k in [config.py](file:///C:/Users/PC/Documents/GitHub/Mario-Kart-DS-RL-Agent/src/utils/config.py); exposed `learning_starts` and `target_update_interval` options in [train_sb3_dqn.py](file:///C:/Users/PC/Documents/GitHub/Mario-Kart-DS-RL-Agent/train_sb3_dqn.py).
+- **Reward Shaping**: Added steering direction change penalty (anti-oscillation) and lap-time completion reward inside [mkds_gym_env.py](file:///C:/Users/PC/Documents/GitHub/Mario-Kart-DS-RL-Agent/env/mkds_gym_env.py).
+- **Evaluation Video Recording**: Integrated SB3 `VecVideoRecorder` into [demo.py](file:///C:/Users/PC/Documents/GitHub/Mario-Kart-DS-RL-Agent/demo.py) via `--record-video` flag.
+- **Heatmap Scaling**: Divided coordinates by 4096.0 in [plot_generator.py](file:///C:/Users/PC/Documents/GitHub/Mario-Kart-DS-RL-Agent/analysis/plot_generator.py) to map real-world meters on density plots.
+- **Action Space**: Introduced 6-action space containing drift inputs.
+- **Telemetry Callback**: Added [callbacks.py](file:///C:/Users/PC/Documents/GitHub/Mario-Kart-DS-RL-Agent/src/utils/callbacks.py) to log per-step training metrics.
+
+---
 
 ## License
 

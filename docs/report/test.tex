@@ -1,0 +1,419 @@
+\documentclass[11pt,a4paper]{article}
+
+% --- Typography and Encoding ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathpazo} % Palatino font
+\usepackage[scaled=0.95]{helvet} % Helvetica for sans-serif
+\usepackage{courier} % Courier for monospace
+\usepackage{microtype} % Typography improvements
+
+% --- Page Layout ---
+\usepackage{geometry}
+\geometry{top=1.2in, bottom=1.2in, left=1in, right=1in, headheight=14pt}
+
+% --- Colors ---
+\usepackage{xcolor}
+\definecolor{primary}{RGB}{0, 82, 155}     % Professional Blue
+\definecolor{secondary}{RGB}{105, 105, 105} % Dim Gray
+\definecolor{accent}{RGB}{200, 30, 30}      % Crimson Red
+\definecolor{codebg}{RGB}{248, 249, 250}    % Light Gray for code
+
+% --- Section Styling ---
+\usepackage{titlesec}
+\titleformat{\section}{\Large\bfseries\sffamily\color{primary}}{\thesection}{1em}{}[\vspace{-0.5em}\rule{\textwidth}{0.5pt}]
+\titleformat{\subsection}{\large\bfseries\sffamily\color{secondary}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\sffamily}{\thesubsubsection}{1em}{}
+
+% --- Headers and Footers ---
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\sffamily\color{secondary}\small Mario Kart DS RL Agent}
+\fancyhead[R]{\sffamily\color{secondary}\small Autonomous Agents}
+\fancyfoot[C]{\sffamily\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{secondary}\leaders\hrule height \headrulewidth\hfill}}
+\renewcommand{\footrule}{\hbox to\headwidth{\color{secondary}\leaders\hrule height \footrulewidth\hfill}}
+
+% --- Figures, Tables, and Math ---
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{caption}
+\captionsetup{labelfont={bf,sf,color=primary}, textfont=it, skip=10pt, format=hang}
+
+% --- Code Listings ---
+\usepackage{listings}
+\lstset{
+    backgroundcolor=\color{codebg},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{secondary},
+    captionpos=b,
+    keywordstyle=\color{primary}\bfseries,
+    commentstyle=\color{secondary}\itshape,
+    stringstyle=\color{accent}
+}
+
+% --- Hyperlinks ---
+\usepackage[colorlinks=true, linkcolor=primary, urlcolor=primary, citecolor=primary, bookmarksnumbered=true]{hyperref}
+
+% --- Custom Commands ---
+\newcommand{\placeholderbox}[2]{%
+  \begin{center}%
+    \fcolorbox{secondary}{codebg}{%
+      \parbox[c][#2][c]{\linewidth}{%
+        \centering\sffamily\color{secondary} #1%
+      }%
+    }%
+  \end{center}%
+}
+
+\begin{document}
+
+\begin{titlepage}
+    \centering
+    \sffamily
+    
+    \vspace*{1.5cm}
+    {\LARGE\color{secondary} Technical University of Crete}\\[0.5cm]
+    {\Large School of Electrical and Computer Engineering}\\[2cm]
+    
+    \placeholderbox{Technical University of Crete Logo Placeholder}{3cm}\\[2cm]
+    
+    {\Large\color{primary} \textbf{Autonomous Agents}}\\[0.5cm]
+    
+    \noindent\makebox[\linewidth]{\color{primary}\rule{\textwidth}{2pt}}\\[0.8cm]
+    {\Huge\bfseries Mario Kart DS --- RL Agent}\\[0.4cm]
+    {\LARGE Autonomous Navigation using DQN and CNN}\\[0.4cm]
+    \noindent\makebox[\linewidth]{\color{primary}\rule{\textwidth}{2pt}}\\[1.5cm]
+    
+    {\Large\textbf{Project Documentation}}\\[2cm]
+    
+    \placeholderbox{Mario Kart DS Cover Image Placeholder}{5cm}\\[3cm]
+    
+    \vfill
+    \begin{flushleft}
+        \large
+        \textbf{Student:}\\
+        Karalis Asterinos \hfill \textbf{ID:} 2020030107
+    \end{flushleft}
+\end{titlepage}
+
+\newpage
+\pagestyle{plain}
+\tableofcontents
+\newpage
+\pagestyle{fancy}
+\setcounter{page}{1}
+
+\section{Introduction}
+
+\subsection{Project Objective}
+The primary objective of this project is the development of an autonomous Reinforcement Learning (RL) agent capable of navigating the complex, high-dimensional environment of \textit{Mario Kart DS}. The architecture employs a Deep Q-Network (DQN) that maps raw visual inputs to discrete driving actions through a Convolutional Neural Network (CNN) backbone. By integrating visual perception with low-level telemetry data, the agent learns to optimize its racing line through iterative trial and error.
+
+\textit{Mario Kart DS} presents a significant challenge for autonomous agents due to the necessity of real-time decision-making in a dynamic, stochastic environment while interpreting pixel-based observations. To improve convergence, this project utilizes a dual-input methodology:
+\begin{itemize}
+    \item \textbf{Visual Processing:} A CNN processes the top-screen display buffer to extract spatial features.
+    \item \textbf{Telemetry Integration:} Internal RAM variables including speed, off-road status, and checkpoint progress are extracted to shape a robust and informative reward function.
+\end{itemize}
+This hybrid approach ensures the agent remains reactive to visual cues while being strictly grounded in the physical constraints and mechanics of the game engine.
+
+\subsection{About Mario Kart DS}
+\textit{Mario Kart DS} is a landmark kart-racing title developed by Nintendo for the Nintendo DS, released in late 2005. As the fifth installment in the series, it features iconic characters and tracks based on locations within the Mario universe. The game was a critical and commercial success, selling approximately 23.6 million copies worldwide by 2016.
+
+\subsubsection{Core Mechanics and Gameplay}
+The racing environment involves competing against seven opponents on various circuitous tracks (Grand Prix mode), solo driving on the same maps for the best time (Time Trials mode) and other minigames. Central to the gameplay is the use of items obtained from ``Item Boxes'' scattered across the course that allow racers to attack and decelerate opponents (e.g., Shells) or provide temporary speed boosts to gain a competitive advantage (e.g., Mushrooms).
+
+\subsubsection{Project's enviroment}
+For the purposes of this project, the agent is evaluated within the \textbf{Time Trial} mode on the \textit{Figure-8 Circuit}, utilizing a specific save state to ensure repeatable training conditions. This was chosen in order to simplify the enviroment as much as possible (no opponents, no item boxes, simple racing track). In this mode, the agent's only goal is to finish 3 laps as fast as possible.
+
+\section{Environment and Setup}
+The training environment bridges Nintendo DS hardware abstraction with modern Reinforcement Learning frameworks by wrapping the \texttt{DeSmuME} emulator within a custom Gymnasium interface (\texttt{MKDSEnv}). This architecture enables high-frequency state observation and low-latency action execution.
+\begin{itemize}
+    \item \textbf{Emulator Interface:} \texttt{py-desmume} facilitates direct interaction with DS internals for real-time buffer capture and RAM manipulation.
+    \item \textbf{RL Framework:} \textit{Stable-Baselines3 (SB3)} provides the DQN implementation.
+    \item \textbf{Image Processing:} \texttt{OpenCV} and \texttt{Pillow} downsample RGBX buffers into $84 \times 84$ grayscale tensors.
+\end{itemize}
+
+\subsection{Environment Configuration}
+The \texttt{MKDSEnv} class manages the emulator lifecycle and state transitions.
+\begin{itemize}
+    \item \textbf{State Representation:} Observations use the top-screen display, cropped and downsampled.
+    \item \textbf{Temporal Context:} A \texttt{VecFrameStack} of 4 frames allows the agent to perceive velocity and direction.
+    \item \textbf{Action Space:} Discretized into three outputs (Straight (Gas), Left (Gas+Left), and Right (Gas+Right)) to accelerate initial convergence.
+    \item \textbf{Reset Logic:} The environment utilizes \texttt{mkds\_boot.dst} to ensure every episode begins at the Figure-8 Circuit starting line.
+\end{itemize}
+
+\subsection{DQN-CNN Architectural Integration}
+The agent employs a Deep Q-Network where a Convolutional Neural Network (CNN) acts as the function approximator for state-action values, $Q(s, a)$.
+\begin{itemize}
+    \item \textbf{Input Tensors:} The state $s$ is a 4-frame grayscale stack of shape $(4, 84, 84)$.
+    \item \textbf{Feature Extraction:} The \textit{Nature CNN} uses three convolutional layers (32 filters $8 \times 8$, 64 filters $4 \times 4$, and 64 filters $3 \times 3$) to identify track boundaries and positioning.
+    \item \textbf{Policy Head:} A 512-unit fully connected layer outputs 3 neurons predicting future rewards for the discrete action set $\{Straight, Left, Right\}$.
+\end{itemize}
+The agent follows an $\epsilon$-greedy policy: $a = \arg\max_a Q(s, a)$. Crucially, while the CNN processes visual pixels, telemetry data (speed, off-road status) is used exclusively for the reward calculation ($R_t$) to guide the weight updates during backpropagation.
+
+\section{Code Implementation}
+The project consists of the following files. You can find the latest version of this project on my GitHub repository: \url{https://github.com/Asterinos1/Mario-Kart-DS-RL-Agent}. The current build referenced here is the 'MKDS - Project Submission Version' release (tag \texttt{v1.0.0})
+
+\subsection{Project Structure}
+The following directory tree outlines the organization of the project's files:
+\begin{verbatim}
+Mario-Kart-DS-RL-Agent (root)/
+├── analysis/ ..................................................Data processing and visualization
+│   ├── plot_generator.py .............................................For processing csv log files
+│   └── tf_event_parser.py ..........................................For processing DQN log files
+├── env/ .......................................................Gymnasium environment wrapper
+│   └── mkds_gym_env.py ..................Custom class for setting the environment used in training
+├── media/ ....................................................Contains media files (mp4 and gif)
+├── logs/ ........................... TensorBoard training logs, (will be generated during training)
+├── outputs/ ..................Generated models and telemetry, (will be generated during training)
+│   └── {run_id}/ ..........................Example of what the insides will look like after training
+│       ├── logs/ ...................Contains a csv file with various metrics captured during training
+│       ├── models/ ....................................................Saved models from training
+│       └── plots/ ........................................Generated plots from the analysis scripts
+├── rom/ ...................................................................Game ROM directory
+├── src/utils/ .................................................Helper scripts and configurations
+│   ├── callbacks.py
+│   ├── config.py ..............................................Helper scripts and configurations.
+│   └── ram_vars_testing.py .....................................Helper scripts and configurations
+├── demo.py ..............................................................Model evaluation script
+├── mkds_boot.dst ....................................................... Initialization save state
+├── requirements.txt ....................................Required packages for enviroment setup
+└── train_sb3_dqn.py ..................................................Main training entry point
+\end{verbatim}
+
+\subsection{File Roles and Descriptions}
+The implementation is categorized into four functional areas: the Environment, Training, Analysis, and Utilities.
+
+\subsubsection{Core Environment}
+\begin{itemize}
+    \item \texttt{mkds\_gym\_env.py}: Defines the \texttt{MKDSEnv} class, which inherits from \texttt{gymnasium.Env}. It manages the emulator lifecycle, captures the top-screen display for CNN input, and extracts RAM-based telemetry to calculate the reward signal.
+\end{itemize}
+
+\subsubsection{Training and Execution}
+\begin{itemize}
+    \item \texttt{train\_sb3\_dqn.py}: The primary entry point for training. It configures the Stable-Baselines3 DQN agent, sets up the \texttt{SubprocVecEnv} for parallel processing, and manages checkpoint logic.
+    \item \texttt{demo.py}: A specialized script for evaluating trained agents. It enables emulator visualization and loads a selected model to run autonomously.
+\end{itemize}
+
+\subsubsection{Analysis and Monitoring}
+\begin{itemize}
+    \item \texttt{plot\_generator.py}: Processes the \texttt{telemetry\_log.csv} to create heatmaps, action distribution charts, cumulative reward and terminal reason summaries.
+    \item \texttt{tf\_event\_parser.py}: Extracts data from TensorBoard event files to generate various custom plots.
+\end{itemize}
+
+\subsubsection{Utilities and Configuration}
+\begin{itemize}
+    \item \texttt{config.py}: Centralizes hyperparameters and memory addresses for the USA version of the ROM.
+    \item \texttt{callbacks.py}: Implements \texttt{MKDSMetricsCallback} to record telemetry data periodically during training.
+    \item \texttt{ram\_vars\_testing.py}: A diagnostic tool used to verify that pointer-based memory extraction (speed, grip, etc.) is functioning correctly.
+\end{itemize}
+
+\subsection{Reward Function and Watchdog Logic}
+To facilitate effective policy learning, the environment implements a complex reward shaping mechanism. This mechanism transforms raw RAM telemetry into a scalar reinforcement signal, guiding the agent toward optimal racing behavior while penalizing undesirable states.
+
+\subsubsection{Standard Reward Calculation}
+During nominal driving conditions, the reward is primarily driven by the forward velocity and progression through the course's checkpoint system:
+\begin{itemize}
+    \item \textbf{The Checkpoint System:} Checkpoints are internal, invisible boundaries placed linearly along the track. In \textit{Mario Kart DS}, the game engine uses these to verify that a player is traversing the circuit in the correct order and to calculate lap completion. For the RL agent, these act as ``milestones'' that break the long-term goal of finishing a lap into smaller, achievable tasks.
+    \item \textbf{Progression Bonus:} A significant sparse reward of $+15.0$ is granted whenever the agent successfully crosses a new checkpoint ($CP_i > CP_{i-1}$). This prevents the agent from simply driving in circles or staying at the start line to accumulate small velocity rewards.
+    \item \textbf{Velocity Reward:} The agent receives a continuous reward calculated as $R_v = v \times 2.0$, where $v$ is the current forward speed extracted from the base pointer.
+    \item \textbf{Surface Penalty:} To discourage driving on grass or dirt, the total reward is scaled by $0.5$ if the \texttt{offroad} modifier drops below $0.9$, effectively halving the agent's efficiency.
+\end{itemize}
+
+\subsubsection{Watchdog Termination Systems}
+Because DQN can struggle with ``sparse'' failures where an agent is stuck but still accumulating small time-based rewards, several ``Watchdog'' systems are implemented to terminate suboptimal episodes early:
+\begin{enumerate}
+    \item \textbf{Backward Driving Detection:} If the current checkpoint index is lower than the previous index within the same lap, the agent is assumed to be driving in the wrong direction. The episode is terminated with a penalty of $-50.0$.
+    \item \textbf{Checkpoint Timeout:} The agent must make progress within a specific internal time window. If the race timer exceeds 10 internal ticks without a checkpoint change, the episode is truncated with a $-15.0$ penalty to prevent idling.
+    \item \textbf{Collision Detection:} A sudden drop in velocity (greater than 50\%) while at low speeds is interpreted as a wall collision. This results in immediate termination and a $-30.0$ penalty.
+    \item \textbf{Stuck Detection:} The environment monitors the Euclidean distance between the agent's current position $(x, y, z)$ and its position from 80 cycles prior. If the distance moved is less than 50 units, a ``stuck'' state is triggered, resulting in a $-20.0$ penalty.
+\end{enumerate}
+
+\subsubsection{Completion Reward}
+Upon successfully completing three laps ($lap > 3$), the agent receives a final completion bonus of $+100.0$, signaling the successful achievement of the project's objective.
+
+\subsection{Analysis and Results}
+The evaluation phase of this project relies on custom-built analytical tools that process raw training data into interpretable visualizations. These tools allow for the objective assessment of the agent's spatial awareness, action preferences, and the effectiveness of the watchdog systems.
+
+\subsubsection{Telemetry and Spatial Visualization}
+The \texttt{plot\_generator.py} script serves as the primary tool for post-run analysis. By parsing the \texttt{telemetry\_log.csv} file, it generates four critical visualizations:
+\begin{itemize}
+    \item \textbf{Cumulative Reward:} A plot showing the total reward as it accumulates during the training of the agent.
+    \item \textbf{Track Position Heatmap:} Utilizing a Gaussian Kernel Density Estimate (KDE) via \texttt{seaborn}, this plot visualizes the density of the agent's $(x, z)$ coordinates. It provides immediate feedback on the agent's chosen racing line and identifies areas where the agent frequently goes off-road.
+    \item \textbf{Action Distribution:} This bar chart maps numeric actions to their descriptive counterparts (\textit{Gas}, \textit{Gas+Left}, \textit{Gas+Right}). It is used to detect ``action collapse,'' where an agent might over-rely on a single input, such as constant steering.
+    \item \textbf{Termination Analysis:} A pie chart categorizing the reasons for episode endings—such as \textit{stuck}, \textit{collision}, \textit{timeout}, or \textit{finished}. This is crucial for tuning the penalty weights in the reward function.
+\end{itemize}
+
+\subsubsection{Training Metrics and Learning Curves}
+Long-term performance trends are monitored using TensorBoard logs and the \texttt{tf\_event\_parser.py} script. Key metrics analyzed include:
+\begin{itemize}
+    \item \textbf{Exploration Rate:} Tracks the epsilon decay process, visualizing the transition from random exploration to deterministic exploitation of the learned policy.
+    \item \textbf{Training Efficiency and Throughput:} Monitored via both \texttt{rollout/fps} and \texttt{time/fps} to measure the hardware processing speed and the overhead of the parallelized environments.
+    \item \textbf{Network Convergence Metrics:} Analyzes \texttt{train/loss} and \texttt{train/learning\_rate} to ensure stable optimization of the Q-network and to verify the behavior of the learning rate scheduler.
+    \item \textbf{Episode Duration (\texttt{rollout/ep\_len\_mean}):} Measures the number of steps per episode, providing insight into whether the agent is completing laps more quickly or surviving longer before a watchdog trigger.
+\end{itemize}
+
+\subsubsection{Demonstration and Real-time Evaluation}
+The \texttt{demo.py} script provides a qualitative assessment by allowing the user to select a specific model checkpoint (\texttt{.zip}) and observe the agent's driving in real-time. Unlike the training phase, the demonstration environment forces the \texttt{visualize} parameter to \texttt{True}, enabling the SDL window to display the emulator's output directly. This allows for a direct comparison between the analytical plots and the actual physical behavior of the agent on the track.
+
+\section{Execution Workflow}
+The following section outlines the end-to-end procedural pipeline for deploying the Mario Kart DS RL agent. The workflow is designed to be modular, allowing for seamless transitions between environment preparation, model training, and performance analysis.
+
+\subsection{Phase 1: Environment Initialization}
+Before execution, the software dependencies and game assets must be correctly positioned within the project structure:
+\begin{enumerate}
+    \item \textbf{Dependency Installation:} Install the required Python packages using the provided requirements file: \texttt{pip install -r requirements.txt}.
+    \item \textbf{ROM Placement:} Place the Mario Kart DS (USA version) ROM in the \texttt{rom/} directory. The \texttt{config.py} script is designed to auto-detect any \texttt{.nds} file in this location.
+    \item \textbf{Save State Verification:} Ensure the \texttt{mkds\_boot.dst} file is in the root directory. This state is critical for placing the agent at the Figure-8 Circuit start line during every reset cycle.
+\end{enumerate}
+
+\subsection{Phase 2: Training the Agent}
+The training process utilizes the Stable-Baselines3 DQN implementation and supports both fresh starts and resuming from checkpoints:
+\begin{itemize}
+    \item \textbf{Execution:} Run the main training script: \texttt{python train\_sb3\_dqn.py}.
+    \item \textbf{Model Selection:} Upon execution, an interactive menu scans the \texttt{outputs/} directory. The user can select an existing \texttt{.zip} model to resume training or press Enter to initiate a new session.
+    \item \textbf{Safe Interruption:} Users may interrupt training at any time using \texttt{Ctrl+C}. The script includes a \texttt{finally} block that triggers an ``Emergency Save,'' capturing the current model and replay buffer state before exiting.
+\end{itemize}
+
+\subsection{Phase 3: Data Analysis and Plot Generation}
+Once training data is captured in the \texttt{telemetry\_log.csv} and TensorBoard files, visualizations are generated to interpret the results:
+\begin{enumerate}
+    \item \textbf{Telemetry Visualization:} Execute \texttt{python plot\_generator.py} from the \texttt{analysis/} directory. Select the desired \texttt{run\_id} to generate heatmaps and action distribution charts.
+    \item \textbf{Metric Parsing:} Run \texttt{python tf\_event\_parser.py} to convert raw TensorBoard events into readable performance curves.
+    \item \textbf{Output:} All generated graphs are automatically saved to the \texttt{outputs/\{run\_id\}/plots/} folder for inclusion in research reports.
+\end{enumerate}
+
+\subsection{Phase 4: Agent Evaluation and Demonstration}
+The final phase involves observing the agent's learned behavior in a live environment:
+\begin{itemize}
+    \item \textbf{Live Demo:} Run \texttt{python demo.py} to launch the emulator with visualization enabled.
+    \item \textbf{Deterministic Testing:} The demo script loads the selected model and executes actions in a non-stochastic manner, allowing for a qualitative assessment of the agent's optimized racing line.
+\end{itemize}
+
+\section{Experimental Results}
+The evaluation of the DQN agent was conducted through a series of training episodes on the \textit{Figure-8 Circuit}. This section outlines the quantitative and qualitative performance of the agent, grounded in the data extracted via \texttt{plot\_generator.py} and \texttt{tf\_event\_parser.py}.
+
+\subsection{Experiment Configuration}
+To ensure reproducibility, the agent was trained using a standardized set of hyperparameters and a parallelized environment setup. The training process leveraged the \texttt{SubprocVecEnv} wrapper to run four concurrent emulator instances, maximizing data collection efficiency.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Hyperparameter} & \textbf{Value} \\
+\midrule
+Total Timesteps & 300,000 \\
+Learning Rate & 0.00025 \\
+Batch Size & 128 \\
+Buffer Size & 50,000 \\
+Gamma ($\gamma$) & 0.99 \\
+Frame Stacking ($n$) & 4 \\
+\bottomrule
+\end{tabular}
+\caption{DQN Training Hyperparameters}
+\label{tab:hyperparams}
+\end{table}
+
+\subsection{Visual Performance Analysis}
+Below are the plots generated by the analysis tools for the above configuration.
+
+\begin{figure}[H]
+\begin{minipage}{0.48\textwidth}
+\placeholderbox{Figure 1: Figure-8 Circuit Reference Map Placeholder}{4cm}
+\caption{Figure-8 Circuit Reference Map}
+\label{fig:fig1}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+\placeholderbox{Figure 2: Track Position Density (Heatmap) Placeholder}{4cm}
+\caption{Track Position Density (Heatmap)}
+\label{fig:fig2}
+\end{minipage}
+\end{figure}
+
+From the comparison, we can see how the agent learns the layout of the map and avoids crashing on the walls and driving off-road (grass sections).
+
+\newpage
+
+\begin{figure}[H]
+\begin{minipage}{0.48\textwidth}
+\placeholderbox{Figure 3: Exploration Rate (Epsilon Decay) Placeholder}{4cm}
+\caption{Exploration Rate (Epsilon Decay)}
+\label{fig:fig3}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+\placeholderbox{Figure 4: Cumulative Reward Growth Placeholder}{4cm}
+\caption{Cumulative Reward Growth}
+\label{fig:fig4}
+\end{minipage}
+\end{figure}
+
+For the given run we can see how the exploration rate decays and how the total reward accumulates. Something to note here is the cumulative reward is plotted up to approx. 90,000. This was taken from another test (due to time restrictions) but the behavior is the same on every run.
+
+\begin{figure}[H]
+\begin{minipage}{0.48\textwidth}
+\placeholderbox{Figure 5: Neural Network Training Loss Placeholder}{4cm}
+\caption{Neural Network Training Loss}
+\label{fig:fig5}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+\placeholderbox{Figure 6: Learning Rate Schedule Placeholder}{4cm}
+\caption{Learning Rate Schedule}
+\label{fig:fig6}
+\end{minipage}
+\end{figure}
+
+Here we have some other metrics. Learning Rate is set to steady for the entire run while loss seem to fluctuate through out the run. This can be attributed to the agent ``learning'' a portion of the course at a time.
+
+\newpage
+
+\begin{figure}[H]
+\begin{minipage}{0.48\textwidth}
+\placeholderbox{Figure 7: Input Action Distribution Placeholder}{4cm}
+\caption{Input Action Distribution}
+\label{fig:fig7}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+\placeholderbox{Figure 8: Terminal State Reason Analysis Placeholder}{4cm}
+\caption{Terminal State Reason Analysis}
+\label{fig:fig8}
+\end{minipage}
+\end{figure}
+
+\begin{figure}[H]
+\begin{minipage}{0.48\textwidth}
+\placeholderbox{Figure 9: Speed vs. Offroad Density Correlation Placeholder}{4cm}
+\caption{Speed vs. Offroad Density Correlation}
+\label{fig:fig9}
+\end{minipage}
+\hfill
+\begin{minipage}{0.48\textwidth}
+\placeholderbox{Figure 10: System Throughput (FPS) Placeholder}{4cm}
+\caption{System Throughput (FPS)}
+\label{fig:fig10}
+\end{minipage}
+\end{figure}
+
+In the last four graphs we can see more details of the agent's behavior. How he tends to steer more to the left (attributed to learning the first left corner, if we watch the mp4 we will observe how he tends to stick to the right part of the road constantly), the main reason for resetting a run is mainly crashing on walls, with a small portion of finishing and very rarely driving backwards. Also we can observe that more often (almost double) the agent drives at full speed rather than being slowed on off-road or sliding against walls. Finally the performance of running 4 instances is getting a lot better at around 150,000, this is because the agent is getting better and tends to reset less (resetting causes extra load on the CPU).
+
+\section*{References}
+\begin{itemize}
+    \item[] \textbf{Stable-Baselines3:} \url{https://github.com/DLR-RM/stable-baselines3}
+    \item[] \textbf{Gymnasium:} \url{https://gymnasium.farama.org/}
+    \item[] \textbf{py-desmume:} \url{https://pypi.org/project/py-desmume/}
+    \item[] \textbf{DeSmuME Emulator:} \url{https://desmume.org/}
+    \item[] \textbf{Mario Kart DS:} \url{https://en.wikipedia.org/wiki/Mario_Kart_DS}
+    \item[] \textbf{MKDS TAS Community Works:} \url{https://tasvideos.org/userfiles/game/1652}
+\end{itemize}
+
+\end{document}

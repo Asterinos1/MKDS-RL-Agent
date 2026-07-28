@@ -123,8 +123,13 @@ def generate_plots():
     ax = plt.gca()
     ax.set_facecolor('white')  # Override whitegrid grey to keep KDE colours vivid.
 
+    # Scale coordinates from NDS fixed-point to meters
+    df_scaled = df.copy()
+    df_scaled['pos_x_m'] = df_scaled['pos_x'] / 4096.0
+    df_scaled['pos_z_m'] = df_scaled['pos_z'] / 4096.0
+
     sns.kdeplot(
-        data=df, x="pos_x", y="pos_z",
+        data=df_scaled, x="pos_x_m", y="pos_z_m",
         fill=True,         # Shade the density regions rather than just contour lines.
         thresh=0.05,       # Drop the bottom 5 % density band to reduce noise.
         levels=100,        # High level count gives a smooth gradient appearance.
@@ -133,10 +138,10 @@ def generate_plots():
     )
 
     plt.title("Track Position Density")
-    plt.xlabel("Position X")
-    plt.ylabel("Position Z")
+    plt.xlabel("Position X (meters)")
+    plt.ylabel("Position Z (meters)")
     plt.grid(True)
-    # Note: pos_x/pos_z are raw NDS fixed-point units; divide by 4096.0 for real-world scale.
+    # Note: pos_x/pos_z are scaled by 4096.0 to convert raw NDS fixed-point to real-world meters.
     plt.savefig(os.path.join(plot_dir, "heatmap.png"), dpi=300, facecolor='white')
     plt.close()
 
