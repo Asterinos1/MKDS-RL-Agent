@@ -49,45 +49,56 @@ def setup_logging(log_file=None, level=logging.INFO):
     return root_logger
 
 
-from stable_baselines3.common.logger import KVWriter
+_LoggerOutputFormatClass = None
 
-class LoggerOutputFormat(KVWriter):
-    """Custom KVWriter that outputs training metrics using python standard logging instead of ASCII tables."""
-    def __init__(self) -> None:
-        self.logger = logging.getLogger("sb3")
+def get_logger_output_format():
+    """Returns the custom LoggerOutputFormat class, importing KVWriter lazily
+    to avoid importing stable_baselines3 / tensorflow during startup.
+    """
+    global _LoggerOutputFormatClass
+    if _LoggerOutputFormatClass is None:
+        from stable_baselines3.common.logger import KVWriter
 
-    def write(self, key_values: dict, key_excluded: dict, step: int) -> None:
-        # Group metrics to make the line extremely readable
-        rollout_parts = []
-        train_parts = []
-        time_parts = []
-        other_parts = []
-        
-        for k, v in sorted(key_values.items()):
-            val_str = f"{v:.4f}" if isinstance(v, float) else str(v)
-            if k.startswith("rollout/"):
-                rollout_parts.append(f"{k.split('/')[-1]}={val_str}")
-            elif k.startswith("train/"):
-                train_parts.append(f"{k.split('/')[-1]}={val_str}")
-            elif k.startswith("time/"):
-                time_parts.append(f"{k.split('/')[-1]}={val_str}")
-            else:
-                other_parts.append(f"{k}={val_str}")
+        class LoggerOutputFormat(KVWriter):
+            """Custom KVWriter that outputs training metrics using python standard logging instead of ASCII tables."""
+            def __init__(self) -> None:
+                self.logger = logging.getLogger("sb3")
+
+            def write(self, key_values: dict, key_excluded: dict, step: int) -> None:
+                # Group metrics to make the line extremely readable
+                rollout_parts = []
+                train_parts = []
+                time_parts = []
+                other_parts = []
                 
-        log_msg = f"Step {step}"
-        if rollout_parts:
-            log_msg += " | Rollout: " + ", ".join(rollout_parts)
-        if train_parts:
-            log_msg += " | Train: " + ", ".join(train_parts)
-        if time_parts:
-            log_msg += " | Time: " + ", ".join(time_parts)
-        if other_parts:
-            log_msg += " | Other: " + ", ".join(other_parts)
-            
-        self.logger.info(log_msg)
+                for k, v in sorted(key_values.items()):
+                    val_str = f"{v:.4f}" if isinstance(v, float) else str(v)
+                    if k.startswith("rollout/"):
+                        rollout_parts.append(f"{k.split('/')[-1]}={val_str}")
+                    elif k.startswith("train/"):
+                        train_parts.append(f"{k.split('/')[-1]}={val_str}")
+                    elif k.startswith("time/"):
+                        time_parts.append(f"{k.split('/')[-1]}={val_str}")
+                    else:
+                        other_parts.append(f"{k}={val_str}")
+                        
+                log_msg = f"Step {step}"
+                if rollout_parts:
+                    log_msg += " | Rollout: " + ", ".join(rollout_parts)
+                if train_parts:
+                    log_msg += " | Train: " + ", ".join(train_parts)
+                if time_parts:
+                    log_msg += " | Time: " + ", ".join(time_parts)
+                if other_parts:
+                    log_msg += " | Other: " + ", ".join(other_parts)
+                    
+                self.logger.info(log_msg)
 
-    def close(self) -> None:
-        pass
+            def close(self) -> None:
+                pass
+        
+        _LoggerOutputFormatClass = LoggerOutputFormat
+    return _LoggerOutputFormatClass
 
 
 class StdoutLogger:

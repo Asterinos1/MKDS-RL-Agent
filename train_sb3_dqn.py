@@ -14,6 +14,7 @@ Typical usage::
 """
 
 import os
+import sys
 import glob
 import argparse
 import logging
@@ -21,12 +22,47 @@ from datetime import datetime
 import types
 import pickle
 import tqdm
-from stable_baselines3 import DQN
-from stable_baselines3.common.vec_env import SubprocVecEnv, VecFrameStack
-from stable_baselines3.common.callbacks import CheckpointCallback, CallbackList
-from env.mkds_gym_env import MKDSEnv
-from src.utils.callbacks import MKDSMetricsCallback
 from src.utils import config, setup_logging, redirect_stdout_to_logger
+
+# Placeholder globals for dynamically loaded libraries
+DQN = None
+SubprocVecEnv = None
+VecFrameStack = None
+CheckpointCallback = None
+CallbackList = None
+MKDSEnv = None
+MKDSMetricsCallback = None
+
+
+def load_dependencies():
+    """Dynamically loads heavy RL dependencies (Stable-Baselines3, Gym Env, Callbacks)
+    and monkey-patches DQN to avoid loading TensorFlow/PyTorch during initial setup/CLI parsing.
+    """
+    global DQN, SubprocVecEnv, VecFrameStack, CheckpointCallback, CallbackList, MKDSEnv, MKDSMetricsCallback
+    
+    # If already loaded, retain and return (avoids repeating imports and patching)
+    if DQN is not None:
+        return
+        
+    logger.info("Loading RL dependencies (Stable-Baselines3, PyTorch, TensorFlow)...")
+    
+    from stable_baselines3 import DQN as _DQN
+    from stable_baselines3.common.vec_env import SubprocVecEnv as _SubprocVecEnv, VecFrameStack as _VecFrameStack
+    from stable_baselines3.common.callbacks import CheckpointCallback as _CheckpointCallback, CallbackList as _CallbackList
+    from env.mkds_gym_env import MKDSEnv as _MKDSEnv
+    from src.utils.callbacks import MKDSMetricsCallback as _MKDSMetricsCallback
+    
+    # Monkey-patch Stable-Baselines3 DQN class to use custom tqdm methods
+    _DQN.save_replay_buffer = custom_save_replay_buffer
+    _DQN.load_replay_buffer = custom_load_replay_buffer
+    
+    DQN = _DQN
+    SubprocVecEnv = _SubprocVecEnv
+    VecFrameStack = _VecFrameStack
+    CheckpointCallback = _CheckpointCallback
+    CallbackList = _CallbackList
+    MKDSEnv = _MKDSEnv
+    MKDSMetricsCallback = _MKDSMetricsCallback
 
 logger = logging.getLogger(__name__)
 
@@ -37,18 +73,27 @@ class TqdmFileWrapper:
         self.file_obj = file_obj
         self.pbar = pbar
 
+    def _get_length(self, data):
+        try:
+            return len(data)
+        except TypeError:
+            try:
+                return memoryview(data).nbytes
+            except TypeError:
+                return 0
+
     def write(self, b):
         self.file_obj.write(b)
-        self.pbar.update(len(b))
+        self.pbar.update(self._get_length(b))
 
     def read(self, n=-1):
         chunk = self.file_obj.read(n)
-        self.pbar.update(len(chunk))
+        self.pbar.update(self._get_length(chunk))
         return chunk
 
     def readline(self, limit=-1):
         line = self.file_obj.readline(limit)
-        self.pbar.update(len(line))
+        self.pbar.update(self._get_length(line))
         return line
 
     def __getattr__(self, attr):
@@ -99,9 +144,7 @@ def custom_load_replay_buffer(self, path):
             self.replay_buffer = pickle.load(wrapper)
 
 
-# Monkey-patch Stable-Baselines3 DQN class to use custom tqdm methods
-DQN.save_replay_buffer = custom_save_replay_buffer
-DQN.load_replay_buffer = custom_load_replay_buffer
+
 
 
 
@@ -209,6 +252,12 @@ def parse_args():
         action="store_true",
         help="Skip saving and loading of the replay buffer (saves space and prevents saving delays).",
     )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default=config.DEVICE,
+        help=f"Device to train on (e.g., 'auto', 'cuda', 'cpu') (default: {config.DEVICE})",
+    )
 
     return parser.parse_args()
 
@@ -302,6 +351,143 @@ def select_resume_option():
     return options[int(choice)] if choice.isdigit() and int(choice) < len(options) else (None, None)
 
 
+def run_wizard():
+    """Interactive setup wizard for starting or resuming training.
+    
+    Prompts the user for key hyperparameters (Device, Buffer Size, Timesteps,
+    n_envs, and Buffer Saving) with shown defaults and estimated disk space requirements.
+    """
+    print("\n==================================================")
+    print("      Mario Kart DS RL Agent Setup Wizard")
+    print("==================================================")
+    
+    # 1. Start Fresh or Resume
+    resumable_options = []
+    if os.path.exists("outputs"):
+        runs = [d for d in os.listdir("outputs") if os.path.isdir(os.path.join("outputs", d))]
+        for run in runs:
+            model_files = glob.glob(f"outputs/{run}/models/*.zip")
+            if model_files:
+                latest_model = max(model_files, key=os.path.getmtime)
+                resumable_options.append((run, latest_model))
+                
+    resume_path = None
+    run_id = None
+    
+    if resumable_options:
+        print("\nTraining Mode:")
+        print("  1) Start a fresh training run (default)")
+        print("  2) Resume an existing training run")
+        mode_choice = input("\nSelect mode (1 or 2): ").strip()
+        if mode_choice == "2":
+            print("\n--- Available Models to Resume ---")
+            for i, (rid, path) in enumerate(resumable_options):
+                print(f"{i}: {rid} ({os.path.basename(path)})")
+            
+            while True:
+                idx = input(f"\nSelect index to resume (0-{len(resumable_options)-1}): ").strip()
+                if idx.isdigit() and int(idx) < len(resumable_options):
+                    run_id, resume_path = resumable_options[int(idx)]
+                    break
+                else:
+                    print("Invalid selection. Please choose a valid index.")
+    else:
+        print("\nNo existing checkpoints found. Starting a fresh training run.")
+        
+    # 2. Configure Settings
+    print("\n--- Configure Parameters (Press Enter to keep defaults) ---")
+    
+    # Device
+    default_device = config.DEVICE
+    device = input(f"Device (cuda, cpu, auto) [default: {default_device}]: ").strip() or default_device
+    
+    # Buffer Size
+    default_buf = config.MEMORY_SIZE
+    while True:
+        buf_input = input(f"Replay Buffer Size [default: {default_buf}]: ").strip()
+        if not buf_input:
+            buf_size = default_buf
+            break
+        elif buf_input.isdigit():
+            buf_size = int(buf_input)
+            break
+        else:
+            print("Please enter a valid integer.")
+            
+    # Total Timesteps
+    default_steps = config.TOTAL_TIMESTEPS
+    while True:
+        steps_input = input(f"Total Timesteps [default: {default_steps}]: ").strip()
+        if not steps_input:
+            total_timesteps = default_steps
+            break
+        elif steps_input.isdigit():
+            total_timesteps = int(steps_input)
+            break
+        else:
+            print("Please enter a valid integer.")
+            
+    # n-envs
+    default_envs = config.NUM_OF_INSTANCES
+    while True:
+        envs_input = input(f"Number of parallel environments (n-envs) [default: {default_envs}]: ").strip()
+        if not envs_input:
+            n_envs = default_envs
+            break
+        elif envs_input.isdigit():
+            n_envs = int(envs_input)
+            break
+        else:
+            print("Please enter a valid integer.")
+            
+    # Skip Buffer Save
+    skip_buf_input = input("Skip saving replay buffer to save space? (y/n) [default: n]: ").strip().lower()
+    skip_buffer_save = (skip_buf_input == 'y')
+    
+    # Summary & Confirmation
+    # Calculate estimated disk space: each transition is ~56.5 KB
+    estimated_gb = (buf_size * 56.5) / (1024 * 1024)
+    
+    print("\n==================================================")
+    print("           Configuration Summary")
+    print("==================================================")
+    print(f"  Mode:              {'Resume' if resume_path else 'Fresh'}")
+    if resume_path:
+        print(f"  Resuming From:     {run_id} ({os.path.basename(resume_path)})")
+    print(f"  Device:            {device}")
+    print(f"  Buffer Size:       {buf_size} transitions")
+    if not skip_buffer_save:
+        print(f"  Estimated Disk:    ~{estimated_gb:.2f} GB space required for buffer save")
+    else:
+        print("  Estimated Disk:    Minimal (Buffer saving is disabled)")
+    print(f"  Total Timesteps:   {total_timesteps}")
+    print(f"  Parallel Envs:     {n_envs}")
+    print("==================================================")
+    
+    input("\nConfiguration confirmed. Press Enter to start training...")
+    print()
+    
+    # Construct args namespace matching parse_args structure
+    return argparse.Namespace(
+        resume=resume_path,
+        fresh=(resume_path is None),
+        total_timesteps=total_timesteps,
+        batch_size=config.BATCH_SIZE,
+        n_envs=n_envs,
+        stack_size=config.STACK_SIZE,
+        gamma=config.GAMMA,
+        learning_rate=config.LEARNING_RATE,
+        buffer_size=buf_size,
+        action_space=config.ACTION_SPACE,
+        learning_starts=config.LEARNING_STARTS,
+        target_update_interval=config.TARGET_UPDATE_INTERVAL,
+        tb_log_dir="./logs/",
+        save_freq=10000,
+        skip_buffer_save=skip_buffer_save,
+        device=device
+    )
+
+
 def train(args=None):
     """Main training loop for the Mario Kart DS DQN agent.
 
@@ -332,7 +518,10 @@ def train(args=None):
             graceful environment shutdown before re-raising via ``finally``.
     """
     if args is None:
-        args = parse_args()
+        if len(sys.argv) == 1:
+            args = run_wizard()
+        else:
+            args = parse_args()
 
     # Initialize console logging
     setup_logging()
@@ -349,6 +538,7 @@ def train(args=None):
     config.ACTION_SPACE = args.action_space
     config.LEARNING_STARTS = args.learning_starts
     config.TARGET_UPDATE_INTERVAL = args.target_update_interval
+    config.DEVICE = args.device
 
     if args.resume:
         try:
@@ -360,6 +550,9 @@ def train(args=None):
         run_id, model_path = None, None
     else:
         run_id, model_path = select_resume_option()
+
+    # Load RL dependencies now that run is selected/started
+    load_dependencies()
 
     # Redirect stdout to logging and capture warnings
     redirect_stdout_to_logger()
@@ -397,7 +590,7 @@ def train(args=None):
 
         # Reload weights and hyper-parameters; bind the resumed model to the
         # freshly created vectorised environment.
-        model = DQN.load(model_path, env=env, device="auto", tensorboard_log=tb_log_path, custom_objects=custom_objects)
+        model = DQN.load(model_path, env=env, device=config.DEVICE, tensorboard_log=tb_log_path, custom_objects=custom_objects)
 
         # The replay buffer is saved alongside the model checkpoint as a .pkl
         # file.  Loading it lets DQN continue off-policy learning immediately
@@ -415,7 +608,7 @@ def train(args=None):
             "CnnPolicy",      # Convolutional policy suited for pixel observations.
             env,
             verbose=1,
-            device="auto",
+            device=config.DEVICE,
             buffer_size=config.MEMORY_SIZE,   # Maximum replay buffer capacity (transitions).
             batch_size=config.BATCH_SIZE,     # Minibatch size for each gradient update.
             learning_rate=config.LEARNING_RATE, # Adam learning rate.
@@ -424,6 +617,8 @@ def train(args=None):
             target_update_interval=config.TARGET_UPDATE_INTERVAL, # Interval to update target network.
             tensorboard_log=tb_log_path,
         )
+
+    logger.info(f"Model initialized on device: {model.device}")
 
     # Create per-run output directories (safe to call even if they already exist).
     base_path = f"outputs/{run_id}"
@@ -434,11 +629,12 @@ def train(args=None):
     setup_logging(log_file=f"{base_path}/logs/train.log")
 
     from stable_baselines3.common.logger import configure
-    from src.utils.logging_setup import LoggerOutputFormat
+    from src.utils.logging_setup import get_logger_output_format
     # Configure SB3 logger to write tensorboard and csv to logs folder, excluding default stdout format
     sb3_logger = configure(f"logs/{run_id}", ["csv", "tensorboard"])
     # Append custom stdout logger output format
-    sb3_logger.output_formats.append(LoggerOutputFormat())
+    LoggerOutputFormatClass = get_logger_output_format()
+    sb3_logger.output_formats.append(LoggerOutputFormatClass())
     model.set_logger(sb3_logger)
 
     # --- Callbacks ---
