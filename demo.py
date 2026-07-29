@@ -79,6 +79,12 @@ def parse_args():
         default=2000,
         help="Max number of steps to record in the video (default: 2000)."
     )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default=config.DEVICE,
+        help=f"Device to run inference on (e.g., 'auto', 'cuda', 'cpu') (default: {config.DEVICE})",
+    )
     return parser.parse_args()
 
 
@@ -231,8 +237,8 @@ def run_demo(args=None):
         logger.info(f"Video recording enabled. Output will be saved to: {video_dir}")
 
     try:
-        model = DQN.load(model_path, env=env, device="auto")
-        logger.info("DQN Model loaded successfully.")
+        model = DQN.load(model_path, env=env, device=args.device)
+        logger.info(f"DQN Model loaded successfully on device: {model.device}")
     except Exception as e:
         logger.error(f"Error: Model didn't load properly. {e}")
         # Destroy the emulator before returning to avoid orphaned processes.

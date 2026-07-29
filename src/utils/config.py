@@ -86,6 +86,9 @@ def __getattr__(name: str) -> str:
 # RL Hyperparameters
 # ---------------------------------------------------------------------------
 
+# Device to train on: 'auto' (automatic detection of CUDA/CPU), 'cuda', or 'cpu'.
+DEVICE = "auto"
+
 # Observation image dimensions — 84×84 matches the Atari DQN benchmark so
 # pre-trained CNN weights and published baselines are directly comparable.
 STATE_W, STATE_H = 84, 84

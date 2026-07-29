@@ -95,9 +95,15 @@ class MKDSEnv(gym.Env):
             with suppress_stdout_stderr():
                 self.emu = DeSmuME()
                 self.emu.open(config.ROM_PATH)
+                if os.path.exists(config.SAVE_FILE_NAME):
+                    self.emu.savestate.load_file(config.SAVE_FILE_NAME)
+                    self.emu.savestate.save(1)
         else:
             self.emu = DeSmuME()
             self.emu.open(config.ROM_PATH)
+            if os.path.exists(config.SAVE_FILE_NAME):
+                self.emu.savestate.load_file(config.SAVE_FILE_NAME)
+                self.emu.savestate.save(1)
 
         if self.mute_audio:
             self.emu.volume_set(0)
@@ -464,12 +470,11 @@ class MKDSEnv(gym.Env):
         # Reload the boot save state instead of closing/opening
         # This is much faster than a full emulator restart and avoids the
         # race-select menus that would otherwise need to be navigated.
-        if os.path.exists(config.SAVE_FILE_NAME):
-            if self.suppress_output:
-                with suppress_stdout_stderr():
-                    self.emu.savestate.load_file(config.SAVE_FILE_NAME)
-            else:
-                self.emu.savestate.load_file(config.SAVE_FILE_NAME) 
+        if self.suppress_output:
+            with suppress_stdout_stderr():
+                self.emu.savestate.load(1)
+        else:
+            self.emu.savestate.load(1)
         
         # Reset counters and timers
         self.stuck_counter = 0
