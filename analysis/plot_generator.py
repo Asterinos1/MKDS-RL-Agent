@@ -77,10 +77,12 @@ def generate_plots():
     # Apply a clean whitegrid theme globally before any figure is created.
     sns.set_theme(style="whitegrid")
     plt.rcParams.update({
-        'font.size': 10,
-        'axes.titlesize': 14,
+        'font.size': 11,
+        'axes.titlesize': 15,
         'axes.titleweight': 'bold',
-        'axes.labelsize': 12,
+        'axes.labelsize': 13,
+        'xtick.labelsize': 11,
+        'ytick.labelsize': 11,
         'figure.autolayout': True  # Prevents labels from being clipped on save.
     })
 
@@ -140,7 +142,9 @@ def generate_plots():
     plt.title("Track Position Density")
     plt.xlabel("Position X (meters)")
     plt.ylabel("Position Z (meters)")
-    plt.grid(True)
+    ax = plt.gca()
+    ax.set_axisbelow(False)
+    ax.grid(True, linestyle='-', alpha=0.5, color='black')
     # Note: pos_x/pos_z are scaled by 4096.0 to convert raw NDS fixed-point to real-world meters.
     plt.savefig(os.path.join(plot_dir, "heatmap.png"), dpi=300, facecolor='white')
     plt.close()
@@ -150,7 +154,7 @@ def generate_plots():
     # ------------------------------------------------------------------ #
     plt.figure(figsize=(8, 6))
     # Map integer action IDs to human-readable strings for axis tick labels.
-    action_map = {0: "Gas", 1: "Gas + Left", 2: "Gas + Right"}
+    action_map = {0: "Gas", 1: "Gas + Left", 2: "Gas + Right", 3: "Drift", 4: "Drift + Left", 5: "Drift + Right"}
     action_counts = df['action'].value_counts().sort_index()
     labels = [action_map.get(x, str(x)) for x in action_counts.index]
     # hue=labels + legend=False: satisfies seaborn's categorical colour API
@@ -159,7 +163,9 @@ def generate_plots():
     plt.title("Action Distribution")
     plt.xlabel("Action Type")
     plt.ylabel("Frequency")
-    plt.grid(axis='y', linestyle='--', alpha=0.7)  # Horizontal grid only -- cleaner for bar charts.
+    ax = plt.gca()
+    ax.set_axisbelow(False)
+    ax.grid(True, linestyle='-', alpha=0.7, color='black')
     plt.savefig(os.path.join(plot_dir, "actions.png"), dpi=300)
     plt.close()
 
@@ -176,9 +182,10 @@ def generate_plots():
             autopct='%1.1f%%',              # Display percentage with one decimal place.
             startangle=140,                 # Rotate start so the largest slice is at the top-left.
             colors=sns.color_palette("pastel"),  # Soft palette avoids harsh colours in a pie.
-            wedgeprops={'edgecolor': 'white'}    # White borders separate adjacent slices cleanly.
+            wedgeprops={'edgecolor': 'white'},   # White borders separate adjacent slices cleanly.
+            textprops={'fontsize': 14, 'weight': 'bold'}
         )
-        plt.title("Episode Termination Reasons")
+        plt.title("Episode Termination Reasons", fontsize=20, fontweight='bold')
     plt.savefig(os.path.join(plot_dir, "reasons.png"), dpi=300)
     plt.close()
 
@@ -186,28 +193,42 @@ def generate_plots():
     # 4. Speed vs Offroad Correlation                                      #
     # ------------------------------------------------------------------ #
     plt.figure(figsize=(8, 6))
-    # alpha=0.1 handles overplotting when thousands of steps are logged.
-    sns.scatterplot(data=df, x="offroad", y="speed", alpha=0.1, color='orange')
+    
+    # Scale from 12-bit fixed point
+    df['offroad_scaled'] = df['offroad'] / 4096.0
+    df['speed_scaled'] = df['speed'] / 4096.0
+    
+    # Use hexbin to handle overplotting of millions of steps
+    plt.hexbin(df['offroad_scaled'], df['speed_scaled'], gridsize=50, cmap='YlOrRd', mincnt=1)
+    cb = plt.colorbar(label='Count')
+    
     plt.title("Speed vs. Offroad Performance")
-    plt.xlabel("Offroad Modifier (Lower = More Grass)")
-    plt.ylabel("Speed")
+    plt.xlabel("Offroad Modifier (Scaled, Lower = More Grass)")
+    plt.ylabel("Speed (Scaled)")
+    ax = plt.gca()
+    ax.set_axisbelow(False)
+    ax.grid(True, linestyle='-', alpha=0.5, color='black')
     plt.savefig(os.path.join(plot_dir, "speed_offroad.png"), dpi=300)
     plt.close()
 
     # ------------------------------------------------------------------ #
-    # 5. Cumulative Reward Progress                                        #
+    # 5. Reward Progress                                                   #
     # ------------------------------------------------------------------ #
     if 'reward' in df.columns:
         plt.figure(figsize=(10, 6))
-        # Calculate cumulative reward over steps
-        df['cumulative_reward'] = df['reward'].cumsum()
+        
+        # Calculate rolling average over 1000 steps
+        window = 1000
+        df['rolling_reward'] = df['reward'].rolling(window=window).mean()
 
-        plt.plot(df['step'], df['cumulative_reward'], color='green', linewidth=2)
-        plt.title("Cumulative Reward over Training Steps")
+        plt.plot(df['step'], df['rolling_reward'], color='green', linewidth=2)
+        plt.title(f"Rolling Average Reward (Window = {window} Steps)")
         plt.xlabel("Step")
-        plt.ylabel("Total Reward")
-        plt.grid(True, alpha=0.3)  # Light grid avoids competing visually with the line.
-        plt.savefig(os.path.join(plot_dir, "cumulative_reward.png"), dpi=300)
+        plt.ylabel("Average Reward")
+        ax = plt.gca()
+        ax.set_axisbelow(False)
+        ax.grid(True, linestyle='-', alpha=0.5, color='black')
+        plt.savefig(os.path.join(plot_dir, "rolling_reward.png"), dpi=300)
 
     print(f"Plots saved to {plot_dir}/")
 

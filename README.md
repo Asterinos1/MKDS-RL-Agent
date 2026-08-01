@@ -37,7 +37,7 @@ graph LR
     B --> D{DQN CnnPolicy}
     C --> D
     D -->|action 0,1,2| A
-    D --> E[ReplayBuffer 50k]
+    D --> E[ReplayBuffer 200k]
     E -->|batch 128| F[CNN + Q-Network]
     F -->|loss| F
     D --> G[MKDSMetricsCallback]
@@ -76,6 +76,7 @@ graph LR
 ### Prerequisites
 
 Ensure you have the following available:
+- **Operating System**: Windows, Linux, or macOS
 - **Python 3.12.x**
 - **CUDA-capable GPU** (recommended; CPU training is possible but slow)
 - A legal copy of **Mario Kart DS (USA ROM)** in `.nds` format
@@ -125,11 +126,11 @@ On startup, the script scans `outputs/` for existing runs and offers an interact
 | Algorithm | DQN (`CnnPolicy`) |
 | Observation | 84×84 grayscale, 4-frame stack |
 | Action space | Discrete(3) — straight, left, right |
-| Replay buffer | 50,000 transitions |
+| Replay buffer | 200,000 transitions |
 | Batch size | 128 |
 | Discount (γ) | 0.99 |
 | Learning rate | 0.00025 |
-| Parallel envs | 4 (`SubprocVecEnv`) |
+| Parallel envs | 1 (`SubprocVecEnv`) |
 | Checkpoint freq | Every 10,000 steps |
 
 Training can be safely interrupted at any time with **Ctrl+C**. An interupted run can be resumed later.
@@ -192,12 +193,12 @@ Select a single run for individual plots, or select **0** to overlay all runs on
 
 Major updates since tag0.0.1:
 
-- **DQN Training Stability**: Expanded replay buffer size to 200k in [config.py](file:///C:/Users/PC/Documents/GitHub/Mario-Kart-DS-RL-Agent/src/utils/config.py); exposed `learning_starts` and `target_update_interval` options in [train_sb3_dqn.py](file:///C:/Users/PC/Documents/GitHub/Mario-Kart-DS-RL-Agent/train_sb3_dqn.py).
-- **Reward Shaping**: Added steering direction change penalty (anti-oscillation) and lap-time completion reward inside [mkds_gym_env.py](file:///C:/Users/PC/Documents/GitHub/Mario-Kart-DS-RL-Agent/env/mkds_gym_env.py).
-- **Evaluation Video Recording**: Integrated SB3 `VecVideoRecorder` into [demo.py](file:///C:/Users/PC/Documents/GitHub/Mario-Kart-DS-RL-Agent/demo.py) via `--record-video` flag.
-- **Heatmap Scaling**: Divided coordinates by 4096.0 in [plot_generator.py](file:///C:/Users/PC/Documents/GitHub/Mario-Kart-DS-RL-Agent/analysis/plot_generator.py) to map real-world meters on density plots.
+- **DQN Training Stability**: Expanded replay buffer size to 200k in [config.py](src/utils/config.py); exposed `learning_starts` and `target_update_interval` options in [train_sb3_dqn.py](train_sb3_dqn.py).
+- **Reward Shaping**: Added steering direction change penalty (anti-oscillation) and lap-time completion reward inside [mkds_gym_env.py](env/mkds_gym_env.py).
+- **Evaluation Video Recording**: Integrated SB3 `VecVideoRecorder` into [demo.py](demo.py) via `--record-video` flag.
+- **Heatmap Scaling**: Divided coordinates by 4096.0 in [plot_generator.py](analysis/plot_generator.py) to map real-world meters on density plots.
 - **Action Space**: Introduced 6-action space containing drift inputs.
-- **Telemetry Callback**: Added [callbacks.py](file:///C:/Users/PC/Documents/GitHub/Mario-Kart-DS-RL-Agent/src/utils/callbacks.py) to log per-step training metrics.
+- **Telemetry Callback**: Added [callbacks.py](src/utils/callbacks.py) to log per-step training metrics.
 
 ---
 
